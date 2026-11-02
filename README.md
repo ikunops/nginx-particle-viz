@@ -133,7 +133,7 @@ sudo systemctl enable --now photon-metrics
 
 | 文件 | 变量 | 说明 |
 |---|---|---|
-| `metrics_server.py` | `LOG` | 日志路径 |
+| `metrics_server.py` | `PHOTON_LOG`（环境变量） | 兜底日志路径。正常情况下**不需要设**：路径从 `nginx -T` 自动发现 |
 | | `WINDOW` | 聚合窗口（秒），默认 6 |
 | | `CACHE_TTL` | `nginx -T` 解析缓存（秒），默认 5 |
 | | `OBSERVABILITY` | 不作为业务流量统计的端口（观测端口自身） |
@@ -159,6 +159,19 @@ nginx -T  ───┘         │              └─▶ /api/stream      SSE �
 
 **两侧都是数组驱动**：新增一个 `server{}` 或一台 upstream，下一轮就会多出一张卡，
 不需要改任何代码。
+
+## 兼容性
+
+- **Python 3.6+**。CentOS 7 / RHEL 7 自带 3.6.8，旧版本用了 `ThreadingHTTPServer`
+  和 `subprocess.run(capture_output=)`（都是 3.7+），在 3.6 上直接 ImportError。
+  现已改为兼容垫片，3.7+ 仍走原生实现。
+- **日志路径自动发现**。不再依赖 `LOG` 常量：解析 `nginx -T` 里所有
+  `access_log` 指令，优先选带 `$upstream_addr` 的那个文件。同时存在多种格式
+  时只读管道格式，避免同一请求被重复计数。
+- **静态站点 / 重定向站点不再被丢弃**。旧版只把 `proxy_pass` 当流量目标，
+  导致 `root` 和 `return 301` 的 vhost 完全不进图——在标准安装里这可能是
+  大部分流量。现在 vhost 带 `kind`（`proxy` / `static` / `redirect` / `other`）
+  和真实 `target`。
 
 ## 已知限制
 

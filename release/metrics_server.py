@@ -23,9 +23,66 @@ import re
 import subprocess
 import time
 from collections import defaultdict
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+import subprocess
+from http.server import BaseHTTPRequestHandler
+try:
+    from http.server import ThreadingHTTPServer
+except ImportError:                                   # Python < 3.7
+    import socketserver
+    from http.server import HTTPServer
 
-LOG = "/var/log/nginx/photon-flow.access.log"
+    class ThreadingHTTPServer(socketserver.ThreadingMixIn, HTTPServer):
+        daemon_threads = True
+        allow_reuse_address = True
+
+def _nginx_T():
+    """Expanded nginx config. Popen because 3.6 has no capture_output kwarg."""
+    try:
+        p = subprocess.Popen(["nginx", "-T"], stdout=subprocess.PIPE,
+                             stderr=subprocess.PIPE)
+        out = p.communicate()[0]
+    except Exception:
+        return ""
+    return out.decode("utf-8", "replace")
+
+
+# LOG is a fallback only. The real paths come from the running config, because
+# hard-coding one filename means the collector silently reads nothing on any
+# host whose log_format is named differently - which is the common case.
+LOG = os.environ.get("PHOTON_LOG") or "/var/log/nginx/photon-flow.access.log"
+
+
+def discover_logs():
+    """Every access_log target in `nginx -T`, with the fields it can provide.
+
+    Returns [{"path", "format", "has_upstream"}], most capable first, so the
+    caller can prefer a file that carries $upstream_addr over one that cannot
+    split per backend at all.
+    """
+    text = re.sub(r"#[^\n]*", "", _nginx_T())
+    if not text:
+        return []
+    formats = {}
+    for m in re.finditer(r"log_format\s+([\w\-]+)\s+(.*?);", text, re.S):
+        raw = m.group(2)
+        parts = re.findall(r"'([^']*)'", raw) or [raw]
+        formats[m.group(1)] = "".join(parts)
+
+    out, seen = [], set()
+    for m in re.finditer(r"access_log\s+([^;\s]+)([^;]*);", text):
+        path = m.group(1)
+        if path in ("off",) or path.startswith("syslog:"):
+            continue
+        rest = m.group(2).strip().split() if m.group(2).strip() else []
+        name = rest[0] if rest and not rest[0].startswith(("buffer=", "if=")) else "main"
+        if path in seen:
+            continue
+        seen.add(path)
+        f = formats.get(name, "")
+        out.append({"path": path, "format": name,
+                    "has_upstream": "$upstream_addr" in f})
+    out.sort(key=lambda x: (not x["has_upstream"], x["path"]))
+    return out
 WINDOW = 6.0
 CACHE_TTL = 5.0
 
@@ -51,19 +108,52 @@ _watch = {
 
 
 # --------------------------------------------------------------- access log
+_LOGS_CACHE = {"at": 0.0, "list": []}
+
+
+def _active_logs():
+    """Which files to read, re-discovered at most every CACHE_TTL seconds."""
+    now = time.time()
+    if _LOGS_CACHE["list"] and now - _LOGS_CACHE["at"] < CACHE_TTL:
+        return _LOGS_CACHE["list"]
+    found = [d for d in discover_logs() if os.path.isfile(d["path"])]
+    # A pipe-format file is the only one that can answer per-upstream, so when
+    # one exists the combined-format files are skipped: mixing them would count
+    # the same request twice and report an average of two different latencies.
+    if any(d["has_upstream"] for d in found):
+        found = [d for d in found if d["has_upstream"]]
+    _LOGS_CACHE["list"] = found
+    _LOGS_CACHE["at"] = now
+    return found
+
+
 def tail_log():
+    logs = _active_logs()
+    if logs:
+        for _d in logs:
+            _tail_one(_d["path"], _d["has_upstream"])
+    else:
+        # Nothing discoverable: fall back to the configured path so a host with
+        # an unusual setup still shows something.
+        _tail_one(LOG, True)
+
+
+def _tail_one(path, pipe_fmt):
+    if path not in _hist.setdefault("files", {}):
+        _hist["files"][path] = {"pos": 0}
+    st = _hist["files"][path]
     try:
-        size = os.path.getsize(LOG)
+        size = os.path.getsize(path)
     except OSError:
         return
-    if size < _hist["pos"]:
-        _hist["pos"] = 0
-    if size == _hist["pos"]:
+    if size < st["pos"]:
+        st["pos"] = 0
+    if size == st["pos"]:
         return
-    with open(LOG, "rb") as f:
-        f.seek(_hist["pos"])
-        chunk = f.read(size - _hist["pos"])
-        _hist["pos"] = size
+    with open(path, "rb") as f:
+        f.seek(st["pos"])
+        chunk = f.read(size - st["pos"])
+        st["pos"] = size
     now = time.time()
     for raw in chunk.split(b"\n"):
         if not raw.strip():
@@ -154,8 +244,7 @@ def per_upstream():
 # ------------------------------------------------------------- nginx config
 def parse_nginx_conf():
     try:
-        out = subprocess.run(["nginx", "-T"], capture_output=True,
-                             text=True, timeout=10).stdout
+        out = _nginx_T()
     except Exception:
         return [], {}
 
@@ -217,16 +306,44 @@ def parse_nginx_conf():
             for pm in re.finditer(r"proxy_pass\s+([^\s;]+)\s*;", body):
                 take(pm.group(1))
 
-        if targets:
+        # A vhost with no proxy_pass is still a vhost. Dropping it hid every
+        # static root and every return-301 site from the graph: on a stock
+        # install that is most of the traffic. Record what it actually serves
+        # and let the caller decide how to draw it.
+        if not targets:
+            root = re.search(r"\broot\s+([^;]+);", body)
+            ret = re.search(r"\breturn\s+(\d{3})\s*([^;]*);", body)
+            if ret:
+                kind, target = "redirect", (ret.group(1) + " " + ret.group(2)).strip()
+            elif root:
+                kind, target = "static", root.group(1).strip()
+            else:
+                kind, target = "other", ""
+            vhosts.append({
+                "ports": sorted(set(ports)),
+                "targets": [],
+                "upstream": None,
+                "kind": kind,
+                "target": target,
+                "server_name": (re.search(r"\bserver_name\s+([^;]+);", body).group(1).strip()
+                                if re.search(r"\bserver_name\s+([^;]+);", body) else ""),
+                "ssl": bool(re.search(r"\blisten\s+[^;]*\bssl\b", body)),
+            })
+        else:
             vhosts.append({
                 "ports": sorted(set(ports)),
                 "targets": sorted(set(targets)),
                 "upstream": refs[0] if refs else None,
+                "kind": "proxy",
+                "target": "",
+                "server_name": (re.search(r"\bserver_name\s+([^;]+);", body).group(1).strip()
+                                if re.search(r"\bserver_name\s+([^;]+);", body) else ""),
+                "ssl": bool(re.search(r"\blisten\s+[^;]*\bssl\b", body)),
             })
 
     seen, uniq = set(), []
     for v in vhosts:
-        k = (tuple(v["ports"]), tuple(v["targets"]))
+        k = (tuple(v["ports"]), tuple(v["targets"]), v.get("kind"), v.get("target"))
         if k not in seen:
             seen.add(k)
             uniq.append(v)
@@ -322,8 +439,7 @@ def detect_capacity():
     """
     import re as _re
     try:
-        raw = subprocess.run(["nginx", "-T"], capture_output=True,
-                             text=True, timeout=10).stdout
+        raw = _nginx_T()
     except Exception:
         raw = ""
 
@@ -435,8 +551,7 @@ def payload_topology():
     cfg_lines = []
     cfg_hash = None
     try:
-        raw = subprocess.run(["nginx", "-T"], capture_output=True,
-                             text=True, timeout=10).stdout
+        raw = _nginx_T()
         cfg_hash = hashlib.sha1(raw.encode("utf-8", "replace")).hexdigest()[:12]
         note_config_revision(cfg_hash, raw)
         # 只保留有信息量的行，去掉空行与纯注释
