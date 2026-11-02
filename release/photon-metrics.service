@@ -1,0 +1,24 @@
+[Unit]
+Description=nginx photon flow metrics collector
+Documentation=https://github.com/ikunops/nginx-particle-viz
+After=network.target nginx.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /opt/photon-flow/metrics_server.py
+Restart=always
+RestartSec=2
+
+# 需要读 nginx 日志与执行 nginx -T，所以用 root
+User=root
+
+# 只读 /proc、日志和 nginx 配置，不写任何业务数据
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=full
+ProtectHome=yes
+ReadWritePaths=/opt/photon-flow
+ReadOnlyPaths=/var/log/nginx /etc/nginx
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,19 @@
+# 开发期产物，不提交
+out/
+build/
+web/
+__pycache__/
+*.pyc
+.edgetmp/
+
+# 历史版本与中间文件
+out/*.bak
+out/*.broken
+release/*.local.*
+
+# 编辑器
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
