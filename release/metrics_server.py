@@ -139,6 +139,10 @@ def tail_log():
 
 
 def _tail_one(path, pipe_fmt):
+    # 【为什么在这里就返回】非 pipe 格式的文件（combined 之类）用 "|" 切不开，
+    # 靠 len(p) < 11 兜底并不可靠 —— UA 里带 "|" 且凑够 11 段就会被误解析。
+    if not pipe_fmt:
+        return
     if path not in _hist.setdefault("files", {}):
         _hist["files"][path] = {"pos": 0}
     st = _hist["files"][path]
@@ -170,6 +174,16 @@ def _tail_one(path, pipe_fmt):
             # 旧解析器按 10 字段写，整体错位两位，upstream 读成空，
             # 所有聚合恒为 0。现在按真实顺序取。
             ts = time.mktime(time.strptime(p[0][:19], "%Y-%m-%dT%H:%M:%S"))
+
+            # 【跳过内层一跳】$server_port 属于某个 upstream 目标端口，
+            # 说明这条日志是代理链的内层，外层已经记过一次了。
+            try:
+                sport = int(p[1] or 0)
+            except Exception:
+                sport = 0
+            if sport and sport in internal_ports():
+                continue
+
             _tot["requests"] += 1
             if p[7] not in ("-", ""):
                 _tot["proxied"] += 1
@@ -418,6 +432,27 @@ def note_config_revision(h, raw):
         _watch["events"] = _watch["events"][:10]
 
 
+def internal_ports():
+    """Ports that belong to upstream targets, not to client-facing listeners.
+
+    【为什么需要】nginx 代理一次会产生两条日志：
+        外层 $server_port = 18100、$upstream_addr = 127.0.0.1:18081
+        内层 $server_port = 18081、$upstream_addr = -
+    两个文件都读的话，同一个请求被计两次，requests 恰好是 proxied 的两倍。
+    凡是 $server_port 落在某个 upstream 成员地址里的，都是内层一跳，跳过。
+    """
+    _, ups = config_cached()
+    ports = set()
+    for members in ups.values():
+        for m in members:
+            a = m.get("addr", "")
+            if ":" in a:
+                p = a.rsplit(":", 1)[1]
+                if p.isdigit():
+                    ports.add(int(p))
+    return ports
+
+
 def config_cached():
     now = time.time()
     if now - _cfg["at"] > CACHE_TTL:
@@ -527,8 +562,12 @@ def payload_topology():
         if p:
             portRps[int(p)] += 1.0 / WINDOW
 
+    # 上游目标端口不是「入口」，不进 listen 层
+    skip_ports = internal_ports()
     for v in vhosts:
         for port in v["ports"]:
+            if port in skip_ports:
+                continue
             vid = "listen:%d" % port
             add({"id": vid, "kind": "listen", "label": ":%d" % port,
                  "rps": portRps.get(port, 0.0)})
