@@ -700,13 +700,14 @@ button.tb:focus-visible{outline:1px solid var(--ice);outline-offset:2px}
 /* 左：子 Agent 阵列 */
 
 
-.col-l{position:absolute;left:24px;top:148px;bottom:246px;width:396px;display:flex;flex-direction:column}
+    .col-l{position:absolute;left:24px;top:148px;bottom:295px;width:396px;display:flex;flex-direction:column}
 
 
-.agents{flex:1;display:grid;grid-template-rows:repeat(8,minmax(0,1fr));gap:6px;padding:8px 11px 10px 10px;min-height:0}
+/* align-items:start 必须有：grid 默认 stretch 会把卡片拉到行内最高内容的高度。去掉写死的 8 行，数量变化时由 fitLanes 决定。 */
+.agents{flex:1;display:grid;align-items:start;gap:6px;padding:8px 11px 10px 10px;min-height:0;overflow:hidden}
 
 
-.ag{position:relative;display:flex;flex-direction:column;min-height:0;background:var(--card);border:1px solid rgba(160,190,220,.08);transition:border-color .5s,box-shadow .5s}
+.ag{position:relative;display:flex;flex-direction:column;min-height:80px;background:var(--card);border:1px solid rgba(160,190,220,.08);transition:border-color .5s,box-shadow .5s}
 
 
 .ag-h{display:flex;justify-content:space-between;align-items:center;background:var(--c);color:var(--ink);font-size:10px;font-weight:700;letter-spacing:.05em;line-height:14px;padding:1px 7px;opacity:.82;transition:opacity .4s}
@@ -758,6 +759,18 @@ button.tb:focus-visible{outline:1px solid var(--ice);outline-offset:2px}
 
 
 .ag-r3{display:flex;align-items:flex-end;gap:2px;height:8px}
+/* ---------- 窄列（双列）紧凑卡片 ----------
+   184px 宽时「请求 条 值 并发 条 值」会折行，卡高从 85 涨到 154。
+   窄列保留 端口/请求/并发/状态，去掉柱状图与均值条。 */
+.agents.narrow .ag{min-height:48px}
+.agents.narrow .ag-b{flex:none;justify-content:flex-start;gap:2px;padding:2px 6px}
+.agents.narrow .ag-r{display:flex;flex-wrap:wrap;align-items:center;gap:4px;font-size:8px;line-height:10px}
+.agents.narrow .ag-r .bar{flex:1;min-width:0}
+.agents.narrow .ag-r .v{flex:none;min-width:22px;font-size:7.5px}
+.agents.narrow .ag-r3{display:none}
+.agents.narrow .ag-r2 .avg{display:none}
+.agents.narrow .ag-r2{font-size:8px;gap:4px}
+
 
 
 .ag-r3 i{flex:1;background:var(--c);opacity:.38;min-height:1px}
@@ -799,7 +812,7 @@ button.tb:focus-visible{outline:1px solid var(--ice);outline-offset:2px}
 /* 中：星核 HUD */
 
 
-.stage{position:absolute;left:444px;right:504px;top:0;bottom:246px}
+    .stage{position:absolute;left:444px;right:504px;top:0;bottom:295px}
 
 
 .hud-top{position:absolute;left:50%;top:18px;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:7px;width:660px}
@@ -883,10 +896,13 @@ button.tb:focus-visible{outline:1px solid var(--ice);outline-offset:2px}
 /* 右：锻造工位 */
 
 
-.col-r{position:absolute;right:24px;top:80px;bottom:246px;width:456px;display:flex;flex-direction:column;gap:12px}
+/* bottom 246 -> 201：底部变矮后右栏可以往下延伸 45px。 */
+  /* bottom 295：上游区固定 4 行高度，第 9 个起在容器内滚动。 */
+  /* bottom 36：底部只占左侧后，右栏可以一直落到底，多出的高度全部给 04。 */
+  .col-r{position:absolute;right:24px;top:80px;bottom:36px;width:456px;display:flex;flex-direction:column;gap:12px}
 
 
-.bay{flex:1;display:flex;flex-direction:column}
+.bay{flex:1 1 auto;display:flex;flex-direction:column;min-height:0;overflow:hidden}
 
 
 .bay-job{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;padding:9px 12px 8px;border-bottom:1px solid var(--line)}
@@ -907,7 +923,7 @@ button.tb:focus-visible{outline:1px solid var(--ice);outline-offset:2px}
 .bj-bar i{position:absolute;left:0;top:0;bottom:0;width:0;background:linear-gradient(90deg,var(--ice),var(--hot))}
 
 
-.parts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;padding:8px 10px 2px}
+.parts{display:grid;align-items:start;gap:6px;padding:8px 10px 2px;overflow:auto;min-height:0}
 
 
 .pc{position:relative;display:flex;flex-direction:column;gap:3px;padding:6px 8px 7px;border:1px solid rgba(160,190,220,.1);background:var(--card);cursor:pointer;min-width:0;overflow:hidden;transition:border-color .35s,background .35s,box-shadow .35s;font:inherit;color:inherit;text-align:left}
@@ -967,7 +983,8 @@ button.tb:focus-visible{outline:1px solid var(--ice);outline-offset:2px}
 .pc.focus{border-color:var(--fg)}
 
 
-.op{flex:1;display:flex;flex-direction:column;gap:7px;margin:8px 10px 10px;padding:9px 10px 9px;border:1px solid rgba(160,190,220,.1);background:linear-gradient(180deg,rgba(156,208,255,.05),transparent 70%);min-height:0;overflow:hidden}
+/* flex:0 0 auto 是关键：flex:1 会在空间不足时被优先压缩，把「当前转发」挤扁。 */
+.op{flex:0 0 auto;box-sizing:border-box;display:flex;flex-direction:column;gap:7px;margin:8px 10px 10px;padding:9px 10px 9px;border:1px solid rgba(160,190,220,.1);background:linear-gradient(180deg,rgba(156,208,255,.05),transparent 70%);/* 【为什么给最小高度】实测被压到 90px，而内容需要 179px，一半被裁掉。这里保底 172px，宁可让上面的卡片区滚动，也不能把工序面板切掉。 */min-height:186px;overflow:hidden}
 
 
 .op-h{display:flex;justify-content:space-between;gap:8px;font-size:8.5px;letter-spacing:.16em;color:var(--fg-3);white-space:nowrap}
@@ -1069,7 +1086,11 @@ button.tb:focus-visible{outline:1px solid var(--ice);outline-offset:2px}
 /* 底：四块遥测 */
 
 
-.bottom{position:absolute;left:24px;right:24px;bottom:36px;height:198px;display:grid;grid-template-columns:1.25fr 1fr 1.15fr 1fr;gap:12px}
+/* 高度 198 -> 153：让出的 45px 给右栏，补齐 .parts 的缺口。 */
+  /* 高度 247：右栏上游卡只占 4 行(8 个)，省下的高度全部还给底部面板。 */
+  /* 底部只占左侧 1416px（right 24 -> 480），右侧让出 456px 给 col-r 落下来。
+       比例按实测内容需求：05=450 06=306 07=300 08=323 */
+  .bottom{position:absolute;left:24px;right:480px;bottom:36px;height:247px;display:grid;grid-template-columns:1.15fr 1.05fr 1.22fr 1.05fr;gap:12px}
 
 
 .bottom>.panel{display:flex;flex-direction:column;overflow:hidden}
@@ -1078,7 +1099,8 @@ button.tb:focus-visible{outline:1px solid var(--ice);outline-offset:2px}
 .log{flex:1;padding:6px 12px;font-size:9px;line-height:16px;overflow:hidden;color:var(--fg-3);min-height:0}
 
 
-.lr{display:grid;grid-template-columns:52px 66px 52px minmax(0,1fr);gap:8px;white-space:nowrap}
+/* 前三列按实际内容收窄（时间 43、来源 55、动词 43），把更多空间给描述列。 */
+  .lr{display:grid;grid-template-columns:46px 58px 46px minmax(0,1fr);gap:7px;white-space:nowrap}
 
 
 .lr .a{color:var(--c)}
@@ -1096,13 +1118,16 @@ button.tb:focus-visible{outline:1px solid var(--ice);outline-offset:2px}
 .disp{flex:1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));grid-auto-rows:minmax(0,1fr);column-gap:16px;padding:6px 12px 8px;min-height:0;align-items:center}
 
 
-.dpr{display:grid;grid-template-columns:70px minmax(0,1fr) 16px;gap:7px;align-items:center;font-size:8.5px;color:var(--fg-3)}
+/* 名称 44（in1 只需 ~30）、条吃剩余、队列 18。原来名称占 70 把条挤到 36px。 */
+  /* 名称列只留够 'in1' 的宽度(34)，条吃掉其余；gap 也从 6 收到 4。
+     名称与条之间的空白原本是 44-30=14px 的列内留白，现在全给条。 */
+  .dpr{display:grid;grid-template-columns:auto minmax(0,1fr) 16px;gap:4px;align-items:center;font-size:8.5px;color:var(--fg-3)}
 
 
 .dpr .n{color:var(--c);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
 
-.dpr .bar{height:5px}
+.dpr .bar{height:5px;width:100%}
 
 
 .dpr .q{text-align:right;color:var(--fg-2);font-variant-numeric:tabular-nums}
@@ -1294,6 +1319,26 @@ button.tb:focus-visible{outline:1px solid var(--ice);outline-offset:2px}
 @media (prefers-reduced-motion:reduce){.eyebrow i{animation:none}.dr.new{animation:none}.ag::after{animation:none}.bar i{transition:none}.code li.cur::after{animation:none}}
 
 
+
+/* ---------- 隐藏原生滚动条 ----------
+   深色面板上一条浅灰轨道非常破坏观感，Windows 还带箭头；大屏场景没人会去滚。
+   这里彻底隐藏原生条（滚轮仍可用），改画一条 2px 竖线，只在悬停时出现。 */
+*{scrollbar-width:none;-ms-overflow-style:none}
+*::-webkit-scrollbar{width:0;height:0;display:none}
+
+.thin-scroll{position:relative}
+.thin-scroll .sc-thumb{
+  position:absolute;right:2px;width:2px;border-radius:1px;
+  background:rgba(156,208,255,.55);pointer-events:none;
+  opacity:0;transition:opacity .25s;z-index:6}
+.thin-scroll:hover .sc-thumb{opacity:1}
+
+/* 上下渐隐：暗示还有内容，不留任何控件 */
+.fade-scroll{
+  -webkit-mask-image:linear-gradient(180deg,
+    transparent 0,#000 14px,#000 calc(100% - 14px),transparent 100%);
+  mask-image:linear-gradient(180deg,
+    transparent 0,#000 14px,#000 calc(100% - 14px),transparent 100%)}
 </style>
 
 
@@ -1378,7 +1423,7 @@ button.tb:focus-visible{outline:1px solid var(--ice);outline-offset:2px}
    <div class="ph"><span><b>01</b> / 客户端入口 · INGRESS</span><span id="agMeta">8 ONLINE</span></div>
 
 
-   <div class="agents" id="agents"></div>
+   <div class="agents thin-scroll fade-scroll" id="agents"></div>
 
 
   </aside>
@@ -1474,7 +1519,7 @@ button.tb:focus-visible{outline:1px solid var(--ice);outline-offset:2px}
     </div>
 
 
-    <div class="parts" id="parts"></div>
+    <div class="parts thin-scroll fade-scroll" id="parts"></div>
 
 
     <div class="op" id="op">
@@ -2695,6 +2740,154 @@ function $(id) { return SR.getElementById(id); }
 var stage = $("stage"), glc = $("gl"), fxc = $("fx"), labelsBox = $("labels"), board = $("board"), fitIn = $("fitIn"), nr = $("nr");
 
 
+
+/* ------------------------------------------------------------------
+   列数自适应
+   【为什么不读容器渲染高度】.agents / .parts 的高度会被上一轮渲染的行数
+   反向影响，读 rect 会陷入循环依赖。左栏用固定几何；右栏交给 flex 分配，
+   布局稳定后再读一次 parts 的实际高度。
+   ------------------------------------------------------------------ */
+
+/* ------------------------------------------------------------------
+   细线滚动指示
+   attachThinScroll(el) 给容器加一根随滚动位置移动的 2px 竖线。
+   原生滚动条已用 CSS 隐藏，滚轮照常工作；竖线只在悬停时可见。
+   ------------------------------------------------------------------ */
+function attachThinScroll(el) {
+  if (!el) return;
+  /* 【为什么检查 contains】parts 卡片用 innerHTML="" 重建，会把细线一并清掉。
+     只靠 __thin 标记会误以为已挂过，导致重建后再也不出现。 */
+  if (el.__thin && el.__thumb && el.contains(el.__thumb)) {
+    if (el.__syncThumb) el.__syncThumb();
+    return;
+  }
+  el.__thin = true;
+  var thumb = document.createElement("div");
+  thumb.className = "sc-thumb";
+  el.appendChild(thumb);
+  el.__thumb = thumb;
+
+  function sync() {
+    var sh = el.scrollHeight, ch = el.clientHeight;
+    if (sh <= ch + 1) { thumb.style.opacity = "0"; thumb.style.height = "0px"; return; }
+    var h = Math.max(18, ch * ch / sh);
+    var max = ch - h;
+    var top = (el.scrollTop / (sh - ch)) * max;
+    thumb.style.height = h + "px";
+    thumb.style.top = top + "px";
+  }
+  el.addEventListener("scroll", sync, { passive: true });
+  if (window.ResizeObserver) new ResizeObserver(sync).observe(el);
+  el.__syncThumb = sync;
+  setTimeout(sync, 40);
+}
+
+function fitLanes() {
+  if (!agentsBox || !partsBox) return;
+
+  var GAP = 6;
+
+  function plan(n, avail, floor, maxRow) {
+    var per1 = Math.max(1, Math.floor((avail + GAP) / (floor + GAP)));
+    var cols = (n > per1) ? 2 : 1;
+    var rows = Math.ceil(n / cols);
+    var rowH = Math.floor((avail - (rows - 1) * GAP) / rows);
+    if (rowH > maxRow) rowH = maxRow;
+    var scroll = false;
+    if (rowH < floor) { rowH = floor; scroll = true; }
+    return { cols: cols, rows: rows, rowH: rowH, scroll: scroll };
+  }
+
+  /* 左栏 top 148 / bottom 295 */
+  var colH = 1080 - 148 - 295 - 18;
+  var nE = agentsBox.querySelectorAll(".ag").length;
+  if (nE) {
+    var e = plan(nE, colH, 80, 130);
+    agentsBox.style.gridTemplateColumns = "repeat(" + e.cols + ", 1fr)";
+    agentsBox.style.gridTemplateRows = "none";
+    agentsBox.style.gridAutoRows = e.rowH + "px";
+    agentsBox.style.overflow = e.scroll ? "auto" : "hidden";
+    agentsBox.classList.toggle("narrow", e.cols >= 2);
+  }
+
+  /* ---------- 右栏 ----------
+     结构：col-r = [ bay(03) , deliv(04) ]
+           bay   = [ ph, bay-job, parts, op ]
+     parts 固定 4 行；剩下多出的高度由 op 和 deliv 平分。 */
+  var bayEl = partsBox.parentElement;
+  var opEl = bayEl ? bayEl.querySelector(".op") : null;
+  var delivEl = null;
+  try {
+    var cr = bayEl ? bayEl.closest(".col-r") : null;
+    delivEl = cr ? cr.querySelector("#deliv") : null;
+  } catch (e) {}
+
+  partsBox.style.maxHeight = "none";
+  partsBox.style.flex = "0 0 auto";
+  partsBox.style.minHeight = "0";
+  partsBox.style.overflow = "auto";
+  void partsBox.offsetHeight;
+
+  var nU = partsBox.querySelectorAll(".pc").length;
+  var ROW_H = 60, ROWS = 4;
+  if (nU) {
+    var per1 = Math.max(1, Math.floor((partsBox.clientHeight + 400 + GAP) / (46 + GAP)));
+    var uCols = (nU > per1) ? 2 : 1;
+    partsBox.style.gridTemplateColumns = "repeat(" + uCols + ", 1fr)";
+    partsBox.style.gridTemplateRows = "none";
+    partsBox.style.gridAutoRows = ROW_H + "px";
+    partsBox.style.maxHeight = (ROWS * ROW_H + (ROWS - 1) * GAP + 10) + "px";
+  }
+
+  /* ---- 多出的高度：让 op 和 deliv 各取一半 ---- */
+  if (opEl && bayEl && delivEl) {
+    /* 先让两者回到内容高度，量出总富余 */
+    opEl.style.flex = "0 0 auto";
+    opEl.style.height = "auto";
+    opEl.style.minHeight = "0";
+    delivEl.style.flex = "0 0 auto";
+    delivEl.style.height = "auto";
+    delivEl.style.minHeight = "0";
+    bayEl.style.flex = "0 0 auto";
+    void bayEl.offsetHeight;
+
+    var colrH = 0;
+    try {
+      var crEl = bayEl.closest(".col-r");
+      if (crEl) colrH = crEl.clientHeight;
+    } catch (e) {}
+
+    var natural = bayEl.offsetHeight + (delivEl.offsetHeight || 0) + 12;
+    var surplus = colrH - natural;
+
+    if (surplus > 0) {
+      /* 一半给当前转发，一半给响应记录 */
+      var giveOp = Math.round(surplus / 2);
+      var opBase = opEl.offsetHeight;
+      opEl.style.height = (opBase + giveOp) + "px";
+      opEl.style.flex = "0 0 auto";
+      delivEl.style.flex = "1 1 auto";
+      delivEl.style.minHeight = "0";
+    } else {
+      delivEl.style.flex = "1 1 auto";
+      delivEl.style.minHeight = "0";
+    }
+  }
+
+  attachThinScroll(agentsBox);
+  attachThinScroll(partsBox);
+  if (agentsBox.__syncThumb) agentsBox.__syncThumb();
+  if (partsBox.__syncThumb) partsBox.__syncThumb();
+
+  if (delivEl) {
+    var dl = delivEl.querySelector(".dl");
+    if (dl) {
+      if (!dl.__thin) attachThinScroll(dl);
+      else if (dl.__syncThumb) dl.__syncThumb();
+    }
+  }
+}
+
 var agentsBox = $("agents"), partsBox = $("parts"), dlBox = $("dl"), logBox = $("log"), dispBox = $("disp"), codeBox = $("code");
 
 
@@ -2771,6 +2964,7 @@ AGENTS.forEach(function (a, i) {
 
 
 });
+fitLanes();
 
 
 
@@ -3036,22 +3230,11 @@ function codeFill() {
 
   var cfg = (window.__LIVE && window.__LIVE.config) ? window.__LIVE.config : null;
 
-
+  /* 【为什么不再编造内容】原来没有配置时会推到假 Python（stream.pull 之类），
+     这些行一旦进了队列就会被逐字打出来，看起来像真的。
+     没有真实配置就什么都不写 —— 面板宁可空着，也不能显示编造的内容。 */
   if (!cfg || !cfg.length) {
-
-
-    /* 没有真实配置时，沿用原来的假 Python 作为兜底 */
-
-
-    var kk = PHASES[ST.ph], aa = AGENTS[rint(0, AGENTS.length - 1)];
-
-
-    cPush('    stream.pull("' + aa.id + '", n=' + rint(12, 96) + ")");
-
-
     return;
-
-
   }
 
 
@@ -3100,7 +3283,7 @@ function codeStep(dt) {
     if (nt !== L.typed) { L.typed = nt; L.el.innerHTML = lineHTML(L, nt); }
 
 
-    if (L.typed >= L.len) C.pause = C.q.length ? 0.01 + Math.random() * 0.015 : 0.04 + Math.random() * 0.06;
+    if (L.typed >= L.len) C.pause = C.q.length ? 0.04 + Math.random() * 0.03 : 0.08 + Math.random() * 0.06;
 
 
     setCur(true);
@@ -3116,20 +3299,18 @@ function codeStep(dt) {
 
 
   if (!C.q.length) {
-
-
+    /* 【为什么一次补满】原来每次队列空只补 1 行，然后空转 0.2~0.75 秒，
+       打一行停一下。60 行的配置要打几分钟，面板大部分时间是空的。
+       现在一次补到 4 行，打字速度不变，但队列始终有货，看着是连续流动的。 */
     C.idle -= dt;
-
-
     if (C.idle > 0) { setCur(false); return; }
+    C.idle = 0.12 + Math.random() * 0.10;
 
-
-    C.idle = 0.2 + Math.random() * 0.55;
-
-
-    codeFill();
-
-
+    for (var fill = 0; fill < 4; fill++) {
+      codeFill();
+      if (!C.q.length) break;      /* 没有真实配置时 codeFill 不推东西，直接退出 */
+    }
+    if (!C.q.length) { setCur(false); return; }
   }
 
 
@@ -4660,6 +4841,7 @@ function buildJobDom() {
   });
 
 
+fitLanes();
   partLabels.forEach(function (l) { l.remove(); });
 
 
@@ -6502,6 +6684,7 @@ function startRealConfigFeed() {
 
 
 
+  /* 连队列一起清 —— 里面可能还有之前排进去的旧行 */
   CODE.q.length = 0;
 
 
@@ -7945,7 +8128,7 @@ syncButtons();
 var roT = 0;
 
 
-new ResizeObserver(function () { clearTimeout(roT); roT = setTimeout(layout, 60); }).observe(host);
+new ResizeObserver(function () { clearTimeout(roT); roT = setTimeout(function(){layout();fitLanes();}, 60); }).observe(host);
 
 
 if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { layout(); });
